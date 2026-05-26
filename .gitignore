@@ -1,0 +1,22 @@
+# Environment variables (critical to prevent key leaks)
+.env
+
+# Python caching
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+env/
+myenv/
+
+
+# Streamlit configurations or operational state
+.streamlit/
+.streamlit/*.toml
+
+# OS generated files
+.DS_Store
+Thumbs.db
