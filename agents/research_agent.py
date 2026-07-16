@@ -39,18 +39,11 @@ def research_node(state: AgentState) -> Dict[str, Any]:
     )
     query_response = llm.invoke(query_prompt)
     
-    # Parse queries from output (look for numbered list or plain lines)
+    # Parse queries from output 
     queries = []
-    for line in query_response.content.strip().split("\n"):
-        match = re.match(r"^\d+[\s\.\)-]+(.*)", line.strip())
-        if match:
-            queries.append(match.group(1).strip())
-        elif line.strip() and len(line.strip()) > 5 and not line.strip().startswith("Here"):
-            queries.append(line.strip())
-            
-    queries = queries[:3]
-    if not queries:
-        queries = [f"{topic} {question}"]
+    for line in query_response.content[0]['text'].strip().split("\n"):
+        queries.append(line.strip())
+        
         
     logger.info(f"Target queries generated: {queries}")
     
