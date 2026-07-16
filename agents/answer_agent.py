@@ -10,6 +10,7 @@ from prompts.answer_prompt import ANSWER_GENERATION_TEMPLATE, ANSWER_REVISION_TE
 logger = logging.getLogger(__name__)
 
 def answer_node(state: AgentState) -> Dict[str, Any]:
+    
     """
     Builds the technical report, either drafting from scratch or incorporating critic feedback.
     """
@@ -20,7 +21,7 @@ def answer_node(state: AgentState) -> Dict[str, Any]:
         raise ValueError("GEMINI_API_KEY is not set.")
         
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model="gemini-3.1-flash-lite",
         google_api_key=gemini_key,
         temperature=0.3
     )
