@@ -20,9 +20,9 @@ def critic_node(state: AgentState) -> Dict[str, Any]:
         raise ValueError("GEMINI_API_KEY is not set.")
         
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model="gemini-3.1-flash-lite",
         google_api_key=gemini_key,
-        temperature=0.1
+        temperature=0.2
     )
     
     topic = state.get("topic", "")
@@ -47,7 +47,7 @@ def critic_node(state: AgentState) -> Dict[str, Any]:
         feedback = evaluation.feedback
     except Exception as e:
         logger.error(f"Structured output failed: {e}. Falling back.")
-        score = 7
+        score = 6
         feedback = "The draft matches basic requirements. Please add more depth."
         
     logger.info(f"Evaluation complete. Score: {score}/10")
