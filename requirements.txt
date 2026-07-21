@@ -9,4 +9,4 @@ pydantic>=2.0
 fastapi
 uvicorn
 requests
-
+duckduckgo-search>=8.1.1
