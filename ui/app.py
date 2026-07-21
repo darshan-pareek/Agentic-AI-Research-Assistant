@@ -171,17 +171,6 @@ with col_visual:
     2. **Answer Agent**: Drafts the markdown technical report.
     3. **Critic Agent**: Audits notes vs draft, assigns 1-10 score. Routes back for revisions if below threshold.
     """)
-    st.markdown("""
-    ```
-      [START] ──► [Research Agent] ──► [Answer Agent]
-                                            │
-                                            ▼
-      [END] ◄── [Score >= Threshold?] ◄── [Critic]
-                       │ (No)
-                       ▼
-                 [Answer Agent] (Revision)
-    ```
-    """)
 
 st.divider()
 start_research = st.button("Start Research Pipeline", use_container_width=True)
@@ -279,9 +268,22 @@ if start_research:
 if "results" in st.session_state:
     results = st.session_state["results"]
     
-    final_report = results.get("draft_answer", "")
+    def _to_string(val):
+        if isinstance(val, list):
+            parts = []
+            for item in val:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict) and "text" in item:
+                    parts.append(item["text"])
+                else:
+                    parts.append(str(item))
+            return "\n".join(parts)
+        return str(val) if val is not None else ""
+
+    final_report = _to_string(results.get("draft_answer", ""))
     sources_used = results.get("sources", [])
-    research_notes = results.get("research_notes", "")
+    research_notes = _to_string(results.get("research_notes", ""))
     final_score = results.get("critic_score", 0)
     history = results.get("revision_history", [])
     queries = results.get("search_queries", [])
