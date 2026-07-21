@@ -1,138 +1,146 @@
-# 🎓 Agentic AI Research Assistant
+# Agentic AI Research Assistant
 
-An intermediate-level, industry-standard **Agentic AI Research Assistant** project built using **Python, LangChain, LangGraph, Tavily Search, Google Gemini API**, and **Streamlit**.
+An autonomous multi-agent research synthesis engine built with **Python**, **LangChain**, **LangGraph**, **Tavily Search**, **DuckDuckGo**, **Google Gemini**, and **Streamlit**.
 
-This repository showcases a complete multi-agent workflow implementing **sequential orchestration, conditional routing, shared state memory, and an iterative self-correction loop** (Answer Agent $\leftrightarrow$ Critic Agent). It serves as a strong resume builder for developers transitionining from basic LLM prompt chaining to professional Agentic AI architecture.
+The system automates technical research by orchestrating three specialized LLM agents in a state machine. It plans search strategies, extracts deduplicated facts from real-time web results, drafts structured technical reports, and audits its own work through an automated Critic evaluation loop.
 
 ---
 
-## 🏗️ Architecture & Workflow
+## 💡 Why I Built This
 
-The core state machine is managed by **LangGraph**. The shared `AgentState` passes parameters between three specialized agents:
+Standard LLM prompting for technical research often leads to superficial answers, unverified claims, or outdated information. Single-prompt generation lacks a mechanism for self-correction or fact-checking against live sources.
+
+I designed this project to implement an **autonomous self-correction feedback loop** using **LangGraph**:
+1. **Fact-First Research**: Separating raw data extraction from report drafting to prevent hallucination.
+2. **Automated Peer Review**: Having a Critic Agent audit drafts against collected facts using structured Pydantic schemas before finalizing.
+3. **Resilient Search Pipeline**: Building a primary search integration with Tavily and a fallback to DuckDuckGo to prevent workflow interruptions.
+4. **Flexible Runtime Infrastructure**: Providing both an in-process execution engine and a decoupled REST API service backend via FastAPI.
+
+---
+
+## 🏗️ System Architecture & Workflow
+
+The core workflow is governed by a compiled LangGraph `StateGraph` using a shared `AgentState` dictionary structure.
 
 ```mermaid
 graph TD
-    START([Start]) --> ResearchAgent[Research Agent<br/>Tavily Search API]
-    ResearchAgent --> AnswerAgent[Answer Agent<br/>Gemini 2.5 Flash]
-    AnswerAgent --> CriticAgent[Critic Agent<br/>Gemini 2.5 Flash]
-    CriticAgent --> Condition{Evaluate Answer<br/>Score >= 8 OR Revise Limit >= 3?}
-    Condition -- Yes (Acceptable) --> END([End / Return Final Answer])
-    Condition -- No (Needs Revision) --> AnswerAgent
+    START([Start User Query]) --> ResearchAgent[1. Research Agent<br/>Query Generation & Web Extraction]
+    ResearchAgent --> AnswerAgent[2. Answer Agent<br/>Draft & Revision Engine]
+    AnswerAgent --> CriticAgent[3. Critic Agent<br/>Pydantic Structured Evaluation]
+    CriticAgent --> Condition{Evaluation Check<br/>Score >= 8 OR Revisions >= 3?}
+    Condition -- Approved --> END([End / Export Final Report])
+    Condition -- Needs Revision --> AnswerAgent
 ```
 
-### The Three-Agent Collaborative Pipeline
-1. **Research Agent**: Analyzes user input, generates three targeted search queries, pulls real-time information via Tavily Search, deduplicates URLs, and extracts structured, fact-only "Research Notes".
-2. **Answer Agent**: Synthesizes structured notes into a highly professional technical report. It acts in two modes:
-   - **Generation Mode**: Compiles the first comprehensive draft.
-   - **Revision Mode**: Modifies and enhances the report according to specific feedback received from the Critic.
-3. **Critic Agent**: Audits the draft report against the raw research notes using **Gemini Pydantic structured output** (`with_structured_output`). It scores the report (1–10) and writes constructive, actionable feedback. If the score is $< 8$, the graph loops back to the Answer Agent.
+### The Multi-Agent Pipeline
+
+1. **Research Agent** (`agents/research_agent.py`):
+   - Generates 3 targeted, non-overlapping search queries based on the user prompt.
+   - Queries the web via Tavily Advanced Search. If Tavily fails or returns empty results, it automatically fails over to DuckDuckGo (`ddgs`).
+   - Deduplicates source URLs and extracts bulleted "Research Notes" citing source links.
+
+2. **Answer Agent** (`agents/answer_agent.py`):
+   - Operates in **Draft Mode** on initial execution, synthesizing notes into a structured Markdown technical report (Executive Summary, Core Findings, Implementation/Walkthrough, and References).
+   - Operates in **Revision Mode** when routed back by the Critic, directly addressing specific feedback without introducing external assumptions.
+
+3. **Critic Agent** (`agents/critic_agent.py`):
+   - Audits the draft report against the reference research notes using `llm.with_structured_output(CriticEvaluation)`.
+   - Generates an objective score (1–10) and actionable critique.
+   - If `score < 8` and `revision_count < 3`, the `should_continue` conditional router routes execution back to the Answer Agent.
 
 ---
 
-## 📁 Folder Structure
+## 🛠️ Key Engineering Decisions
+
+- **Pydantic Validation Boundaries**: Used a strict Pydantic model (`CriticEvaluation`) for the Critic Agent to guarantee type-safe evaluation scores (`score: int`, `feedback: str`) for deterministic routing in LangGraph.
+- **Search Resilience**: Implemented a fallback mechanism in `tools/tavily_tool.py`. If Tavily API rate limits or errors occur, the system smoothly falls back to DuckDuckGo parsing without breaking the agent state.
+- **Decoupled Architecture**: Built both a direct local execution pipeline and a standalone FastAPI backend (`server.py`) exposing the state graph over a POST `/research` endpoint, allowing UI and graph execution to scale independently.
+- **Defensive State Handling in UI**: The Streamlit interface handles variable LLM message payload types (string or content block lists) seamlessly, ensuring robust report presentation and Markdown file downloads.
+
+---
+
+## 📁 Repository Structure
 
 ```
-project/
+Agentic AI Research Assistant/
 ├── agents/
-│   ├── __init__.py
-│   ├── research_agent.py   # Analyzes input, queries Tavily, extracts notes
-│   ├── answer_agent.py     # Drafts and revises structured reports
-│   └── critic_agent.py     # Evaluates reports using structured output
+│   ├── research_agent.py   # Generates search queries & extracts fact notes
+│   ├── answer_agent.py     # Synthesizes initial draft and applies revisions
+│   └── critic_agent.py     # Audits draft quality using structured output
 ├── graph/
-│   ├── __init__.py
-│   └── workflow.py         # Constructs and compiles the LangGraph StateGraph
+│   └── workflow.py         # Defines LangGraph nodes, edges, and routing logic
 ├── tools/
-│   ├── __init__.py
-│   └── tavily_tool.py      # Official client wrapper for Tavily Search API
+│   └── tavily_tool.py      # Tavily search wrapper with DuckDuckGo fallback
 ├── prompts/
-│   ├── __init__.py
-│   ├── research_prompt.py  # Prompt templates for queries and note extraction
-│   ├── answer_prompt.py    # Prompt templates for report drafting and revisions
-│   └── critic_prompt.py    # System prompts and Pydantic schema for Critic
+│   ├── research_prompt.py  # Query generation & extraction templates
+│   ├── answer_prompt.py    # Report drafting & revision templates
+│   └── critic_prompt.py    # Critic evaluation system prompt & Pydantic schema
 ├── state/
-│   ├── __init__.py
-│   └── graph_state.py      # State representation using TypedDict
+│   └── graph_state.py      # Shared TypedDict AgentState schema
 ├── ui/
-│   └── app.py              # Visual, interactive Streamlit frontend
+│   └── app.py              # Interactive Streamlit dashboard
 ├── utils/
-│   ├── __init__.py
-│   └── helpers.py          # Logging, env validation, and console output formatting
-├── .env                    # Environment keys (contains GEMINI_API_KEY, TAVILY_API_KEY)
-├── requirements.txt        # Package dependencies
-├── README.md               # Current file
-├── main.py                 # CLI interface for terminal runs
-└── server.py               # Exposes the LangGraph pipeline via a FastAPI REST API
-
+│   └── helpers.py          # Environment verification & logging utilities
+├── .env                    # API keys configuration
+├── requirements.txt        # Python package dependencies
+└── server.py               # FastAPI REST API server
 ```
 
 ---
 
-## 🔌 API & Setup Guide
+## 🚀 Getting Started
 
 ### Prerequisites
-- Python 3.9 to 3.11 installed.
-- A Google Gemini API Key (obtain from [Google AI Studio](https://aistudio.google.com/)).
-- A Tavily Search API Key (obtain from [Tavily AI](https://tavily.com/)).
+- Python 3.9 – 3.11
+- Google Gemini API Key ([Google AI Studio](https://aistudio.google.com/))
+- Tavily Search API Key ([Tavily AI](https://tavily.com/))
 
 ### Installation
-1. **Clone the repository** (or copy these files into a workspace directory).
-2. **Install dependencies**:
+1. Clone the repository:
+   ```bash
+   git clone <repository-url>
+   cd "Agentic AI Research Assistant"
+   ```
+
+2. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-3. **Configure Environment Variables**:
-   - Create a file named `.env` in the root of the project.
-   - Add your API keys:
-     ```env
-     GEMINI_API_KEY="AIzaSy..."
-     TAVILY_API_KEY="tvly-..."
-     ```
+
+3. Configure environment variables in `.env`:
+   ```env
+   GEMINI_API_KEY="your_gemini_api_key"
+   TAVILY_API_KEY="your_tavily_api_key"
+   ```
 
 ---
 
-## 🚀 Execution Instructions
+## 💻 Running the Application
 
-You can run the Agentic Research Assistant in three modes:
-
-### 1. Terminal CLI Mode
-Execute research directly inside your shell to see clean, logged state transitions as the agents communicate:
-```bash
-python main.py --topic "Quantum Computing" --question "What is Google's Sycamore processor and how many qubits did it use in 2019?"
-```
-
-### 2. FastAPI Backend Service Mode
-Launch the FastAPI REST server:
-```bash
-python server.py
-# Or launch directly using uvicorn:
-uvicorn server:app --reload --port 8000
-```
-- Open `http://127.0.0.1:8000/docs` in your browser to access the interactive Swagger UI.
-- You can execute HTTP POST queries directly to the `/research` endpoint using tools like Postman, curl, or our Streamlit frontend.
-
-### 3. Streamlit Interactive Dashboard
-Launch the interactive frontend user interface:
+### 1. Interactive Streamlit Dashboard (Recommended)
+Launch the web UI:
 ```bash
 streamlit run ui/app.py
 ```
 - Open `http://localhost:8501` in your browser.
-- **Workflow Engine Selection**: In the sidebar, choose whether to run the state graph directly in-process (`Direct (Local)`) or decouple execution by sending HTTP requests to the active FastAPI backend (`API Service (FastAPI Backend)`).
-- View, interact with, and export final markdown reports, research notes, and evaluation history logs.
+- **Workflow Engine**: Toggle between `Direct (Local)` graph execution and `API Service (FastAPI Backend)` in the sidebar.
+- Adjust quality thresholds (minimum score, max revision loops) on the fly.
+- Inspect detailed tabs for **Report Output**, **Research Notes**, **Evaluation Loop History**, and **Sources**.
 
+### 2. FastAPI REST Server
+Run the REST API backend:
+```bash
+python server.py
+# Or using uvicorn directly:
+uvicorn server:app --reload --port 8000
+```
+- View interactive Swagger API documentation at `http://127.0.0.1:8000/docs`.
+- Send research requests via HTTP POST to `/research`.
 
 ---
 
-## 📈 Learning Outcomes
-By building this project, you will master:
-1. **Shared State Memory**: How to declare, read, and write to a TypedDict structure shared across multiple isolated LLM runs.
-2. **Conditional Orchestration**: Building loops and routing decisions inside a state machine using LangGraph's conditional edges.
-3. **Structured Tool Use**: Orchestrating real-time web searches and programmatically extracting structured lists of URLs.
-4. **Self-Correction & Refinement Loops**: The industry design pattern where an autonomous Critic evaluates, scores, and feeds back draft answers into a regeneration node.
-5. **Structured JSON Parsing**: Forcing LLMs to strictly adhere to validation boundaries using Pydantic models with `llm.with_structured_output()`.
+## 🔮 Future Improvements
 
----
-
-## 🔮 Future Enhancements
-- **Multi-Query Parallelism**: Executing Tavily searches asynchronously to decrease pipeline execution times.
-- **Human-in-the-loop (HITL)**: Adding an option in LangGraph where the user can inspect the critic score and override the routing decision.
-- **Local PDF Export**: Automatically compiling the markdown report into a structured PDF document.
+- **Asynchronous Parallel Search**: Running Tavily/DuckDuckGo queries concurrently using `asyncio` to reduce initial research latency.
+- **Human-in-the-Loop (HITL)**: Adding LangGraph interrupt breakpoints allowing manual approval or prompt injection before revision loops.
+- **PDF & Document Export**: Exporting generated reports directly into styled PDF and DOCX formats.
